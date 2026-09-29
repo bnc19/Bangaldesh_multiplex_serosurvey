@@ -1,5 +1,30 @@
-# Script to predict the seroprevalence of unsampled communities 
-# using different numbers of sampled communities 
+# Script to predict the seroprevalence of unsampled communities using binomial
+# spatial models (via INLA), for each of five pathogens (CHIKV, DENV, JEV, CHOL, HEV).
+
+
+# Input:  data/deidentified_data.csv - long-format serosurvey data, one row per
+#         individual per pathogen, with binary infection status (`value`). 
+#         data/spatial_objects.RDS - spatial objects for INLA. 
+# Output: outputs/cv_spatial/cv_results_list_hold_out_size_%d.RDS
+#         outputs/spatial_performance_plot.jpg
+# 
+# Method:
+#
+# Between 1 and 65 communities are heldout, and the model is trained on the 
+# remaining communities. At each hold-out size the communities to withhold are 
+# drawn at random and a spatial-only model, is fitted to the remaining communities
+# for each pathogen. Seroprevalence is predicted in the withheld communities. 
+# This is repeated over n_iterations random draws of the hold-out set. 
+# Predicted and observed community seroprevalence are compared using mean
+# absolute error, the correlation across communities, and the Brier skill score. 
+# The three metrics are plotted against the number of communities used for training.
+
+################################################################################
+# Note: results will differ from those in the manuscript because the coordinates
+# released here are rounded, which blurs the finer distance bands, and the 
+# script is set up to only run 5 iterations. 
+################################################################################
+
 
 # set up -----------------------------------------------------------------------
 
@@ -19,7 +44,7 @@ cols = c("#CD3572", "#E0BBC7",  "#FD8D3C",
          "#1E3D8A", "#8CA1CC")
 
 # read in data 
-model_data = read.csv("data/deidentified_data.csv")[,-1] |> 
+model_data = read.csv("data/deidentified_data.csv") |>  select(-X) |> 
   mutate(age_group = factor(age_group, levels = c("<10","11-20", "21-30", "31-40", "41-50", "51-60", ">60"))) 
 
 spatial_objects = readRDS(file = "data/spatial_objects.RDS")
@@ -47,9 +72,9 @@ sizes <- c(1, 10, 30, 50, 65) # number of communities to holdout
 # Run cross-validation ---------------------------------------------------------
 spatial_formula <- y ~ f(spatial, model = spatial_objects$spde)
 
-chik_spatial_formula <- y ~ f(spatial, model = spatial_objects$spde)
+chik_spatial_formula <- y ~ f(spatial, model = spde_prior)
 
-cv_results <- lapply(hold_out_sizes, function(h) {
+cv_results <- lapply(sizes, function(h) {
   run_seroprev_cv(model_data      = df,
                   pathogens       = pathogens,
                   n_iterations    = n_iterations,
@@ -62,7 +87,7 @@ cv_results <- lapply(hold_out_sizes, function(h) {
                   spde_prior      = spde_prior)
 })
 
-names(cv_results) <- paste0("holdout_", hold_out_sizes)
+names(cv_results) <- paste0("holdout_", sizes)
 
 # Plot cross-validation performance  -------------------------------------------
 

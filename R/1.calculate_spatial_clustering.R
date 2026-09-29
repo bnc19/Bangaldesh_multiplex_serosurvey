@@ -1,5 +1,29 @@
 # Script to calculate the degree of spatial clustering at different distance 
-# scales for each pathogen. Takes as input the data frame 'deidentified_data.csv'.  
+# scales for each pathogen. # Quantifies how the risk of being seropositive 
+# depends on proximity to another seropositive individual, for each of five 
+# pathogens (CHIKV, DENV, JEV, CHOL, HEV).
+#
+#
+# Input:  data/deidentified_data.csv - long-format serosurvey data, one row per
+#         individual per pathogen, with binary infection status (`value`). 
+# Output: outputs/spatial_clustering.jpg
+# 
+# Method:
+#
+# The script builds a matrix of distance between pairs of individuals and assigns 
+# parirs to distance bands (0-10 m, 10-100 m, 100 m-1 km, 1-10 km, 10-50 km,
+# 50-100 km, >100 km) plus shared household. Within each band, calculate 
+# concordance and calcualte relative risk compared to reference band of >100km. 
+# Calcualtes 95% confidence intervals by resampling individuals with replacement
+# (n_boot iterations, set to 5 here but 100 were run in the main manuscript). 
+# Script plots relative risk against spatial scale on a log scale, faceted by
+# pathogen. Bands supported by two or fewer concordant pairs are dropped.
+
+################################################################################
+# Note: results will differ from those in the manuscript because the coordinates
+# released here are rounded, which blurs the finer distance bands, and the script
+# is set up to only run 5 iterations. 
+################################################################################
 
 # set up -----------------------------------------------------------------------
 library(tidyverse)
@@ -31,10 +55,10 @@ pathogens =  c("CHIKV", "DENV", "JEV", "CHOL", "HEV")
 set.seed(123)
 
 # Number of bootstrap iterations
-n_boot = 100  # 100 to replicate results in manuscript
+n_boot = 5  # 100 to replicate results in manuscript
 
 # get inf status ---------------------------------------------------------------
-data_long = read.csv("data/deidentified_data.csv")
+data_long = read.csv("data/deidentified_data.csv") |>  select(-X)
 
 data_long = data_long %>% 
   mutate(pathogen = factor(pathogen, levels = pathogens))

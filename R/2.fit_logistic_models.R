@@ -1,5 +1,30 @@
-# Script to fit spatial binomial regression models using R INLA.
-# Takes as input the data frame 'deidentified_data.csv'.
+# Spatial binomial regression models of seropositivity (R-INLA)
+#
+# Estimates associations between individual- and coommunity-level 
+# covariates and the probability of being seropositive for each pathogen,
+# while accounting for residual spatial structure and clustering within
+# households and communities.
+#
+# Input:  data/deidentified_data.csv - long-format serosurvey data, one row per
+#         individual per pathogen, with binary infection status (`value`). 
+# Output: outputs/binomial_univariate_results.csv
+#         outputs/binomial_multivariate_results.csv
+#
+# Method:
+#      Builds spatial mesh and defines a Matern SPDE field on the mesh. For each
+#      pathogen fits a binomial model with a logit link containing age
+#      group, sex, travel history, pig ownership, log population density and
+#      Aedes aegypti and albopictus presence as fixed effects, plus iid random
+#      effects for household and community and the SPDE spatial field.
+#      Repeats with each predictor on its own, keeping the same random
+#      and spatial structure, to give univariate estimates alongside the
+#      adjusted ones.
+
+################################################################################
+# Note: results will differ from those in the manuscript because the coordinates
+# released here are rounded, which blurs the finer distance bands, and the 
+# script is set up to only run 5 iterations. 
+################################################################################
 
 # set up -----------------------------------------------------------------------
 
@@ -12,7 +37,7 @@ library(rnaturalearth) # for map
 library(fmesher)
 
 # read in data
-model_data = read.csv("data/deidentified_data.csv")[,-1]
+model_data = read.csv("data/deidentified_data.csv") |>  select(-X)
 
 cols = c("#CD3572", "#E0BBC7", "#FD8D3C", "#1E3D8A", "#8CA1CC")
 
