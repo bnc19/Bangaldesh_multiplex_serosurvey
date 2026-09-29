@@ -31,7 +31,7 @@ pathogens =  c("CHIKV", "DENV", "JEV", "CHOL", "HEV")
 set.seed(123)
 
 # Number of bootstrap iterations
-n_boot = 100
+n_boot = 100  # 100 to replicate results in manuscript
 
 # get inf status ---------------------------------------------------------------
 data_long = read.csv("data/deidentified_data.csv")
