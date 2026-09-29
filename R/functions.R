@@ -208,4 +208,157 @@ colnames(pos_clean) = c(pathogens, "sample_id")
 }
 
 
+# Run cross-validation on seroprev predictions holding out different numbers of communities
 
+run_seroprev_cv = function(model_data,
+                           pathogens,
+                           n_iterations = 100,
+                           hold_out_size,
+                           spatial_objects,
+                           main_formula,
+                           chik_formula, 
+                           communities,
+                           folder,
+                           spde_prior) {
+  
+  
+  cv_results_list <- list()
+  
+  for (i in 1:length(pathogens)) {
+    
+    p <- pathogens[i]
+    
+    # 1. Filter pathogen data
+    data_pathogen <- model_data %>%
+      filter(pathogen == !!p) %>%
+      arrange(sample_id)
+    
+    cov <- data_pathogen %>%
+      select(-sample_id, -pathogen, -lon, -lat, -value, -community_id)
+    
+    pathogen_cv_results <- vector("list", n_iterations)
+    
+    print(paste(p, "running"))
+    for (iter in 1:n_iterations) {
+      
+      # 2. Sample n communities to hold out
+      test_communities <- sample(communities, size = hold_out_size)
+      
+      # 3. Create a copy of y where test community values are set to NA
+      data_cv <- data_pathogen %>%
+        mutate(y_cv = ifelse(community_id %in% test_communities, NA, value)) 
+      
+      # 4. Build single data stack
+      stack_cv <- inla.stack(
+        data = list(y = data_cv$y_cv),
+        A = list(spatial_objects$A.spde, 1),
+        effects = list(
+          spatial_objects$spatial.index,
+          cov
+        ),
+        tag = "cv_data"
+      )
+      
+      # 5. Fit INLA model
+      # Note: link = 1 enforces inverse-logit transformation for NA prediction rows 
+      # to convert predictions back to probability scale
+      
+      current_formula <- if (p == "CHIKV") chik_formula else main_formula
+      
+      model_cv <- inla(
+        current_formula,
+        data = inla.stack.data(stack_cv),
+        family = "binomial",
+        control.predictor = list(
+          A = inla.stack.A(stack_cv), 
+          compute = TRUE, 
+          link = 1
+        )
+      )
+      
+      
+      # 6. Extract predicted vs observed values for held-out rows
+      test_indices <- which(data_pathogen$community_id %in% test_communities)
+      
+      pathogen_cv_results[[iter]] <- data_pathogen[test_indices, ] %>%
+        mutate(
+          pred_prob = model_cv$summary.fitted.values$mean[test_indices],
+          iteration = iter
+        ) %>%
+        group_by(iteration, community_id) %>%
+        summarise(
+          obs_seroprevalence  = mean(value, na.rm = TRUE),
+          pred_seroprevalence = mean(pred_prob, na.rm = TRUE),
+          .groups = "drop"
+        )
+      
+      print(paste("it =", iter))
+      
+    }
+    
+    
+    cv_results_list[[p]] <- bind_rows(pathogen_cv_results)
+  }
+  
+  saveRDS(cv_results_list, paste0("outputs/", folder, "/cv_results_list_hold_out_size_", hold_out_size, ".RDS"))
+  
+}
+
+
+
+
+
+# Calculate performance 
+calculate_performance_metrics <- function(results) {
+  
+  results %>% 
+    bind_rows(.id = "pathogen") %>% 
+    # Community-level aggregation
+    group_by(community_id, pathogen) %>%
+    summarise(
+      mean_observed  = mean(obs_seroprevalence, na.rm = TRUE),
+      mean_predicted = mean(pred_seroprevalence, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Pathogen-level summary
+    group_by(pathogen) %>% 
+    summarise(
+      MAE  = mean(abs(mean_observed - mean_predicted)),
+      MSE  = mean((mean_observed - mean_predicted)^2),
+      mean_obs = mean(mean_observed),
+      
+      # Null MSE: Mean Squared Error if predicting national mean (sp) everywhere
+      MSE_null = mean((mean_observed - mean_obs)^2),
+      
+      # Brier Skill Score: 1 - (MSE_model / MSE_null)
+      BSS  = 1 - (MSE / MSE_null),
+      
+      RMSE  = sqrt(MSE),
+      nRMSE = RMSE / mean_obs,
+      Correlation   = cor(mean_observed, mean_predicted),
+      .groups = "drop"
+    ) %>%
+    
+    # Remove the intermediate null step for clean reporting
+    select(-MSE_null)
+}
+
+
+
+
+# Helper function to create base plots for performance metrics 
+make_sub_plot <- function(metric_name) {
+  spatial_performance %>% 
+    filter(name == metric_name) %>% 
+    mutate(value = ifelse(value < -1 & name == "BSS", -1, value)) %>% # negative BSS capped at -1  
+    ggplot(aes(x = factor(communities), y = value, group = pathogen, color = pathogen)) +
+    geom_point() +
+    geom_line() +
+    labs(x = "No. communities", y = metric_name) + # Custom y-axis title for each panel
+    theme_classic() +
+    theme(
+      axis.title = element_text(size = 7),
+      axis.text = element_text(size = 7)
+    ) + 
+    scale_color_manual(values = cols)
+}
