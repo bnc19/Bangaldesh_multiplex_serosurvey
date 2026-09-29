@@ -39,6 +39,9 @@ library(fmesher)
 # read in data
 model_data = read.csv("data/deidentified_data.csv") |>  select(-X)
 
+dir.create("outputs", recursive = T, showWarnings = F)
+
+
 cols = c("#CD3572", "#E0BBC7", "#FD8D3C", "#1E3D8A", "#8CA1CC")
 
 # format data

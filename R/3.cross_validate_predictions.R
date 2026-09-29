@@ -65,7 +65,7 @@ spde_prior = inla.spde2.pcmatern(
 
 folder = "cv_spatial"
 
-dir.create(paste0("outputs/", folder))
+dir.create(paste0("outputs/", folder), recursive = T, showWarnings = F)
 
 sizes <- c(1, 10, 30, 50, 65) # number of communities to holdout 
 

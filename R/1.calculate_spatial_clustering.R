@@ -57,8 +57,11 @@ set.seed(123)
 # Number of bootstrap iterations
 n_boot = 5  # 100 to replicate results in manuscript
 
-# get inf status ---------------------------------------------------------------
 data_long = read.csv("data/deidentified_data.csv") |>  select(-X)
+
+dir.create("outputs", recursive = T, showWarnings = F)
+
+# get inf status ---------------------------------------------------------------
 
 data_long = data_long %>% 
   mutate(pathogen = factor(pathogen, levels = pathogens))
